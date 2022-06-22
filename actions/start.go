@@ -13,13 +13,15 @@ import (
 	"strings"
 
 	"github.com/richbai90/bundle-containers/helpers"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
-// Import Docker from provided path
-func importDocker(containerPath string, verbose bool) {
-	cmd := exec.Command(fmt.Sprintf("docker import %s", containerPath))
-	helpers.Run(cmd, verbose, "Unable to import container. Error: {ERROR}")
+type Config struct {
+	RegName    string `json:"name"`
+	RegPort    int    `json:"port"`
+	RegPath    string `json:"path"`
+	RegVersion string `json:"version"`
 }
 
 func Start(cmd *cobra.Command, args []string) {
@@ -27,18 +29,25 @@ func Start(cmd *cobra.Command, args []string) {
 	var verbose = false
 	// Hold the exec command at each step
 	var osCmd *exec.Cmd
-
+	// Track if starting from import
+	fmt.Println("Starting, this may take a few moments...")
 	if v, err := cmd.Flags().GetBool("verbose"); err == nil {
 		// Set verbose to whatever value the user provided
 		verbose = v
 	}
 
-	if len(args) > 0 {
-		// Start command takes only one positional arg. If it exists, it is the path to an archived docker container.
-		// Import this instead of trying to pull from registry
-		importDocker(args[0], verbose)
+	if file, err := helpers.FS.Open("/config.json"); err == nil {
+		// An import has been run so use the configs from the import instead
+		config := helpers.ReadJsonFile(file)
+		file.Close()
+		// prefer config values except for port which is safe to change between envs
+		helpers.FlagValue(cmd, "version").Set(string(config["version"].(string)))
+		helpers.FlagValue(cmd, "regPath").Set(string(config["path"].(string)))
+		helpers.FlagValue(cmd, "name").Set(string(config["name"].(string)))
+		// We have collected all the useful information from the import, remove the config file now to prevent errors later
+		helpers.FS.Remove("/config.json")
 	} else {
-		// If not provided a positional arg, make sure we have the requested version of the Kind image on the system
+		// first time running. Presumably in dev env.
 		cmd.Flags().Set("version", GetKind(helpers.FlagValue(cmd, "version").String()))
 	}
 
@@ -70,12 +79,7 @@ func Start(cmd *cobra.Command, args []string) {
 	})
 
 	// Collect all the config values used to run this command in an encoding/json compatible struct
-	config := struct {
-		RegName    string `json:"name"`
-		RegPort    int    `json:"port"`
-		RegPath    string `json:"path"`
-		RegVersion string `json:"version"`
-	}{
+	config := Config{
 		RegName:    helpers.FlagValue(cmd, "name").String(),
 		RegPort:    helpers.Atoi(helpers.FlagValue(cmd, "port").String()),
 		RegPath:    helpers.FlagValue(cmd, "regPath").String(),
@@ -83,16 +87,22 @@ func Start(cmd *cobra.Command, args []string) {
 	}
 
 	// Apply the appropriate env vars to influence the install script based on command flags
-	env := []string{
-		fmt.Sprintf("reg_name=%s", config.RegName),
-		fmt.Sprintf("reg_port=%d", config.RegPort),
-		fmt.Sprintf("reg_path=%s", config.RegPath),
-		fmt.Sprintf("reg_version=%s", config.RegVersion),
-		fmt.Sprintf("PATH=%s:%s", os.Getenv("PATH"), path.Dir(kindPath)),
-	}
+	env, _ := helpers.CreateEnvVars(
+		"reg_name", config.RegName,
+		"reg_port", fmt.Sprintf("%d", config.RegPort),
+		"reg_path", config.RegPath,
+		"reg_version", config.RegVersion,
+		"PATH", fmt.Sprintf("%s:%s", os.Getenv("PATH"), path.Dir(kindPath)),
+		"BUNDLE_DIR", helpers.FSRoot,
+	)
 
 	// save the configuration for bundle and cleanup processes
-	helpers.MakeJsonFile("/config", config, func(f fs.File) { f.Close() })
+	helpers.MakeJsonFile("/config.json", config, func(f afero.File) {
+		f.Close()
+		// Make sure the config file is readable by users other than owner.
+		// This is a necessetiy when running on macos as file gets owned by root
+		os.Chmod(helpers.AbsFilePath("/config.json"), 666)
+	})
 
 	if strings.HasSuffix(filename, ".pkg") {
 		// If the kind filename returned is a .pkg then we are running on a mac
@@ -112,8 +122,6 @@ func Start(cmd *cobra.Command, args []string) {
 	// Run the installer
 	helpers.Run(osCmd, verbose, "Failed to execute installer. Error: {ERROR}")
 
-	// Save the version to a file to be used later during the bundle operation
-
 }
 
 // Track at which step the last  prompt was given
@@ -131,7 +139,6 @@ func GetKind(version string) string {
 	if version != "" {
 		Version = version
 	}
-
 
 	var Prompt prompt
 	// Hold the decoded github API response as a map
@@ -180,6 +187,14 @@ func GetKind(version string) string {
 				log.Print("Could not find version number from response. Perhaps the format has changed? Using default value as fallback")
 			}
 		}
+	} else {
+		helpers.WarnWithPrompt(err, "Failed to query the github API. Did you mean to run import first? ", "yY/nN", func(resp string) {
+			if strings.ToLower(resp) == "y" {
+				log.Fatal("Run an import with bundle-containers import and then rerun start. See import -h for more info.")
+			} else {
+				print("Proceeding with default version information.\n")
+			}
+		})
 	}
 
 	if Version == "latest" {
@@ -200,19 +215,17 @@ func GetKind(version string) string {
 
 func ensurePermissions() {
 	cmd := exec.Command("id", "-u")
-         output, err := cmd.Output()
+	output, err := cmd.Output()
 
-         if err != nil {
-                 log.Fatal(err)
-         }
+	helpers.HandleError(err, "Failed to determine user. Error: {ERROR}")
 
-         // output has trailing \n
-         // need to remove the \n
-         // otherwise it will cause error for strconv.Atoi
-         i := helpers.Atoi(string(output[:len(output)-1]))
+	// output has trailing \n
+	// need to remove the \n
+	// otherwise it will cause error for strconv.Atoi
+	i := helpers.Atoi(string(output[:len(output)-1]))
 
-         if i != 0 {
-			// 0 = root
-			log.Fatal("This program must be run with root (sudo) permissions.")
-         }
+	if i != 0 {
+		// 0 = root
+		log.Fatal("This program must be run with root (sudo) permissions.")
+	}
 }

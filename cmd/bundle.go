@@ -26,7 +26,7 @@ var bundleCmd = &cobra.Command{
 }
 
 func init() {
-	bundleCmd.Flags().String("name", "kind-registry", "The name given to the docker container hosting the registry. Defaults to 'kind-registry'. ")
+	bundleCmd.Flags().String("name", "kr", "The name given to the docker container hosting the registry. Defaults to 'kr'. ")
 	rootCmd.AddCommand(bundleCmd)
 
 }

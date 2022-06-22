@@ -41,7 +41,7 @@ func PrettyPrint(v interface{}, writer io.Writer) (err error) {
 	b, err := json.MarshalIndent(v, "", "  ")
 	b = append(b, '\n')
 	if err == nil {
-			writer.Write(b)
+		writer.Write(b)
 	}
 	return
 }
@@ -49,9 +49,7 @@ func PrettyPrint(v interface{}, writer io.Writer) (err error) {
 func CreateTestFile() afero.File {
 	filename := GenRandomString(5)
 	file, err := FS.Create(filename)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+	HandleError(err, "{ERROR}")
 
 	cmd := exec.Command("head", "-c", "100KB", "/dev/urandom")
 	cmd.Stdout = file
@@ -65,9 +63,9 @@ func CreateTestFile() afero.File {
 }
 
 func GenRandomString(len int) string {
-	letters := [26]byte {'a','b','c','d','e','f','g','h','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'}
+	letters := [26]byte{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'}
 	str := make([]byte, len)
-	
+
 	for i := 0; i < len; i++ {
 		rand.Seed(time.Now().UnixNano())
 		char := letters[rand.Intn(27)]

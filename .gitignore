@@ -1,4 +1,5 @@
 .kube
 .vscode
 .docker
-bundle-containers
+build
+.DS_Store

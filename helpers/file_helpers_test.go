@@ -1,7 +1,6 @@
 package helpers
 
 import (
-	"io/fs"
 	"testing"
 
 	"github.com/mholt/archiver/v4"
@@ -22,7 +21,7 @@ func TestMakeJsonFile(t *testing.T) {
 	type args struct {
 		filepath string
 		JSON     interface{}
-		cb       func(fs.File)
+		cb       func(afero.File)
 	}
 	tests := []struct {
 		name string
@@ -33,7 +32,7 @@ func TestMakeJsonFile(t *testing.T) {
 			args: args{
 				filepath: filepath,
 				JSON:     JSON,
-				cb: func(f fs.File) {
+				cb: func(f afero.File) {
 
 					if _, err := f.Stat(); err != nil {
 						t.Errorf("Expected file to be stattable. Got error %s", err.Error())
@@ -46,7 +45,7 @@ func TestMakeJsonFile(t *testing.T) {
 			args: args{
 				filepath: filepath,
 				JSON:     JSON,
-				cb: func(f fs.File) {
+				cb: func(f afero.File) {
 					stats, _ := f.Stat()
 					if stats.Size() < 22 {
 						t.Errorf("Expected file size of 22. Got %d", stats.Size())

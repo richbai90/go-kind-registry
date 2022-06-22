@@ -2,9 +2,11 @@ package helpers
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Display a warning if there was an error
@@ -19,7 +21,7 @@ func Warn(err error, message string) bool {
 	return false
 }
 
-func WarnWithPrompt(err error, message string, prompt string, cb func (resp string)) error {
+func WarnWithPrompt(err error, message string, prompt string, cb func(resp string)) error {
 	if !Warn(err, message) {
 		return nil
 	}
@@ -35,14 +37,14 @@ func WarnWithPrompt(err error, message string, prompt string, cb func (resp stri
 	return nil
 }
 
-// Look for the search value in the provided haystack. 
+// Look for the search value in the provided haystack.
 // If found, set the value of needle to the first matching value in the haystack
 // Return true or false respectively if the needle was in the haystack or not
 func SearchFor[N comparable, H []N](search N, haystack H, needle *N) bool {
 	// s for straw. Clever right?
 	for _, s := range haystack {
 		if s == search {
-			if(needle != nil) {
+			if needle != nil {
 				*needle = s
 			}
 			return true
@@ -53,7 +55,7 @@ func SearchFor[N comparable, H []N](search N, haystack H, needle *N) bool {
 }
 
 // Return true if the needle is in the haystack
-func IsIn [N comparable, H []N](needle N, haystack H) bool {
+func IsIn[N comparable, H []N](needle N, haystack H) bool {
 	return SearchFor(needle, haystack, nil)
 }
 
@@ -61,19 +63,31 @@ func IsIn [N comparable, H []N](needle N, haystack H) bool {
 // If you are not absolutely certain that s is a valid convertable string, don't use this method.
 // Prefer strconv when possible.
 func Atoi(s string) int {
-    i, _ := strconv.Atoi(s)
-    return i
+	i, _ := strconv.Atoi(s)
+	return i
 }
 
 // Return true if the file being executed is a go test file
 func Testing() bool {
 	// allow tests to overwrite the default behavior
-	if os.Getenv("GO_ENVIRON") == "PROD" { return false }
+	if os.Getenv("GO_ENVIRON") == "PROD" {
+		return false
+	}
 	teststr := os.Args[len(os.Args)-1]
 	if matched, _ := regexp.Match(`^\^Test\w+\$$`, []byte(teststr)); matched {
 		println("NOTICE: RUNNING IN TEST ENVIRONMENT. EXPECT INCONSISTENCIES")
 		return true
 	}
-	
+
 	return false
+}
+
+func HandleError(err error, msg ...string) {
+	if err != nil {
+		replacer := strings.NewReplacer("{ERROR}", err.Error())
+		for i, s := range msg {
+			msg[i] = replacer.Replace(s)
+		}
+		log.Fatal(msg)
+	}
 }

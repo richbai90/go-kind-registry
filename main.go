@@ -10,5 +10,7 @@ import (
 )
 
 func main() {
+	// create the root
+	
 	cmd.Execute()
 }

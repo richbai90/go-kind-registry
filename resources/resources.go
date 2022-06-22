@@ -1,5 +1,10 @@
 package resources
-import "embed"
+
+import (
+	"embed"
+
+)
 
 //go:embed resources
 var Resources embed.FS
+
